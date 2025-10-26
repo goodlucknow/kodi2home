@@ -78,12 +78,12 @@ class Kodi2Home:
         """
         try:
             logging.info(
-                f"Connecting to Kodi: {self.config['kodi_adress']}:"
+                f"Connecting to Kodi: {self.config['kodi_address']}:"
                 f"{self.config['kodi_http_port']}/{self.config['kodi_ws_port']}"
             )
 
             self.kodi_connection = get_kodi_connection(
-                self.config["kodi_adress"],
+                self.config["kodi_address"],
                 self.config["kodi_http_port"],
                 self.config["kodi_ws_port"],
                 self.config["kodi_username"],
@@ -133,7 +133,7 @@ class Kodi2Home:
 
         try:
             logging.info(
-                f"Connecting to Home Assistant: {self.config['home_adress']}"
+                f"Connecting to Home Assistant: {self.config['home_address']}"
             )
 
             # Configure SSL
@@ -141,7 +141,7 @@ class Kodi2Home:
 
             # Connect to WebSocket
             self.websocket = await websockets.connect(
-                self.config["home_adress"],
+                self.config["home_address"],
                 ssl=ssl_context,
                 ping_interval=30,  # Send ping every 30s
                 ping_timeout=10,   # Wait 10s for pong
