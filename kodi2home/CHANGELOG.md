@@ -12,6 +12,11 @@
    (Let me,know if it worked)
 ### 0.2.2
 - add init to config.json, is this working?
+## 0.4.1 (Optimized Fork by goodlucknow)
+- Fixed websocket connection state check (removed .closed attribute)
+- Resolves error: 'ClientConnection' object has no attribute 'closed'
+- Button presses now successfully trigger Home Assistant automations
+
 ## 0.4.0 (Optimized Fork by goodlucknow)
 - Complete refactoring for improved reliability and efficiency
 - Fixed critical event loop bug (prevents crashes)
