@@ -12,6 +12,20 @@
    (Let me,know if it worked)
 ### 0.2.2
 - add init to config.json, is this working?
+## 0.4.0 (Optimized Fork by goodlucknow)
+- Complete refactoring for improved reliability and efficiency
+- Fixed critical event loop bug (prevents crashes)
+- Reduced Kodi ping interval from 100s to 30s (3x faster disconnect detection)
+- Implemented exponential backoff for reconnection (2s-60s)
+- Real-time message handling (only last button press on reconnect)
+- Added queue overflow protection
+- PEP 8 compliance, docstrings, and type hints
+- Better error handling and logging
+see https://github.com/goodlucknow/kodi2home for more info
+
+---
+## Original DJJo14 versions below:
+
 ### 0.2.1
 - reconnect if home assistant cuts the connection as workaround. <br>
 see https://github.com/DJJo14/kodi2home for more info and examples
