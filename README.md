@@ -19,7 +19,9 @@ You Need the following things to make this work:
  - A whay to change the keymap on kodi <BR>
    (example: ssh in to libreelec or notepad on windows)
    
-Install kodi2home by going to Settings -> Addon's -> Add-on store -> Vertical ... (upperright) -> repositories -> fill in the url: `https://github.com/DJJo14/kodi2home`.
+Install kodi2home by going to Settings -> Addon's -> Add-on store -> Vertical ... (upperright) -> repositories -> fill in the url: `https://github.com/goodlucknow/kodi2home`.
+
+> **Note:** This is an optimized fork with improved reliability, faster reconnection (2-60s exponential backoff), and real-time message handling. See [CHANGELOG](kodi2home/CHANGELOG.md) for details.
 After a refresh the Kodi2home is now in you add-on store. click on it and press install. After installing you must configurate the add-on the configuration tab.
 Example of the configuration:
 ```yaml
