@@ -224,7 +224,8 @@ class Kodi2Home:
         """
         Send queued messages to Home Assistant.
 
-        Handles reconnection automatically on connection failures.
+        Handles reconnection automatically. On reconnection, only sends the
+        most recent button press to avoid flooding automations with stale commands.
         """
         while not self.shutdown_requested:
             try:
@@ -233,11 +234,29 @@ class Kodi2Home:
 
                 # Ensure we're connected
                 if self.websocket is None or self.websocket.closed:
-                    logging.info("Home Assistant disconnected, reconnecting...")
+                    logging.warning("Home Assistant disconnected, reconnecting...")
+
+                    # Keep only the last message (current one), drop older ones
+                    last_message = service_call
+                    dropped = 0
+                    while not self.queue.empty():
+                        try:
+                            last_message = self.queue.get_nowait()
+                            dropped += 1
+                        except asyncio.QueueEmpty:
+                            break
+
+                    if dropped > 0:
+                        logging.info(f"Dropped {dropped} old button press(es), keeping only the last")
+
+                    # Attempt reconnection
                     if not await self._reconnect_home_assistant():
-                        # Reconnection failed, put message back in queue
-                        await self.queue.put(service_call)
+                        # Reconnection failed, drop the message (real-time behavior)
+                        logging.warning(f"Reconnection failed, dropping trigger: {last_message['service_data']['entity_id']}")
                         continue
+
+                    # Send only the last message as a "reconnection ping"
+                    service_call = last_message
 
                 # Send message
                 await self.websocket.send(json.dumps(service_call))
@@ -245,28 +264,18 @@ class Kodi2Home:
 
             except (websockets.exceptions.ConnectionClosedOK,
                     websockets.exceptions.ConnectionClosedError) as e:
-                logging.warning(f"Home Assistant connection closed: {e}")
+                logging.warning(f"Home Assistant connection closed during send: {e}")
 
-                # Reconnect and retry
-                if await self._reconnect_home_assistant():
-                    try:
-                        await self.websocket.send(json.dumps(service_call))
-                        logging.debug(f"Resent after reconnection: {service_call}")
-                    except Exception as retry_error:
-                        logging.error(f"Failed to resend after reconnection: {retry_error}")
-                        # Put back in queue
-                        await self.queue.put(service_call)
-                else:
-                    # Put back in queue for later
-                    await self.queue.put(service_call)
+                # Drop the message (real-time behavior - don't retry stale button presses)
+                logging.info(f"Dropping trigger due to disconnect: {service_call['service_data']['entity_id']}")
+
+                # Reconnect for next message
+                await self._reconnect_home_assistant()
 
             except Exception as e:
                 logging.error(f"Unexpected error sending to Home Assistant: {e}")
-                # Put message back in queue
-                try:
-                    await self.queue.put(service_call)
-                except asyncio.QueueFull:
-                    logging.error(f"Queue full, message lost: {service_call}")
+                # Drop the message rather than retry
+                logging.warning(f"Dropping trigger due to error: {service_call.get('service_data', {}).get('entity_id', 'unknown')}")
 
     async def receive_from_home_assistant(self):
         """
@@ -398,18 +407,15 @@ class Kodi2Home:
         return False
 
     async def shutdown(self):
-        """Gracefully shutdown all connections and flush queue."""
+        """Gracefully shutdown all connections."""
         logging.info("Shutting down Kodi2Home...")
         self.shutdown_requested = True
 
-        # Flush remaining queue items (with timeout)
+        # For real-time remote control, we don't flush queued messages
+        # Button presses are ephemeral - only current actions matter
         remaining = self.queue.qsize()
         if remaining > 0:
-            logging.info(f"Flushing {remaining} queued messages...")
-            try:
-                await asyncio.wait_for(self._flush_queue(), timeout=5.0)
-            except asyncio.TimeoutError:
-                logging.warning("Queue flush timeout, some messages may be lost")
+            logging.info(f"Discarding {remaining} queued button press(es) - shutdown in progress")
 
         # Close connections
         if self.websocket and not self.websocket.closed:
@@ -427,18 +433,6 @@ class Kodi2Home:
                 logging.error(f"Error closing Kodi connection: {e}")
 
         logging.info("Shutdown complete")
-
-    async def _flush_queue(self):
-        """Flush all remaining items in the queue."""
-        while not self.queue.empty():
-            try:
-                service_call = self.queue.get_nowait()
-                if self.websocket and not self.websocket.closed:
-                    await self.websocket.send(json.dumps(service_call))
-                    logging.debug(f"Flushed message: {service_call}")
-            except Exception as e:
-                logging.error(f"Error flushing queue item: {e}")
-                break
 
 
 def ask_exit(signame: str, k2h: Kodi2Home):
