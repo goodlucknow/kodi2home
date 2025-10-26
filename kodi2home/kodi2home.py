@@ -232,9 +232,14 @@ class Kodi2Home:
                 # Get message from queue
                 service_call = await self.queue.get()
 
-                # Ensure we're connected
-                if self.websocket is None or self.websocket.closed:
-                    logging.warning("Home Assistant disconnected, reconnecting...")
+                # Try to send - if connection is dead, exception will be caught
+                try:
+                    await self.websocket.send(json.dumps(service_call))
+                    logging.debug(f"Sent to Home Assistant: {service_call}")
+                except (AttributeError, websockets.exceptions.ConnectionClosedOK,
+                        websockets.exceptions.ConnectionClosedError) as e:
+                    # Connection is dead or not established
+                    logging.warning(f"Home Assistant disconnected: {e}")
 
                     # Keep only the last message (current one), drop older ones
                     last_message = service_call
@@ -256,24 +261,14 @@ class Kodi2Home:
                         continue
 
                     # Send only the last message as a "reconnection ping"
-                    service_call = last_message
-
-                # Send message
-                await self.websocket.send(json.dumps(service_call))
-                logging.debug(f"Sent to Home Assistant: {service_call}")
-
-            except (websockets.exceptions.ConnectionClosedOK,
-                    websockets.exceptions.ConnectionClosedError) as e:
-                logging.warning(f"Home Assistant connection closed during send: {e}")
-
-                # Drop the message (real-time behavior - don't retry stale button presses)
-                logging.info(f"Dropping trigger due to disconnect: {service_call['service_data']['entity_id']}")
-
-                # Reconnect for next message
-                await self._reconnect_home_assistant()
+                    try:
+                        await self.websocket.send(json.dumps(last_message))
+                        logging.debug(f"Sent after reconnection: {last_message}")
+                    except Exception as retry_error:
+                        logging.error(f"Failed to send after reconnection: {retry_error}")
 
             except Exception as e:
-                logging.error(f"Unexpected error sending to Home Assistant: {e}")
+                logging.error(f"Unexpected error in send loop: {e}")
                 # Drop the message rather than retry
                 logging.warning(f"Dropping trigger due to error: {service_call.get('service_data', {}).get('entity_id', 'unknown')}")
 
@@ -286,8 +281,8 @@ class Kodi2Home:
         """
         while not self.shutdown_requested:
             try:
-                # Ensure connection
-                if self.websocket is None or self.websocket.closed:
+                # Ensure connection exists
+                if self.websocket is None:
                     logging.info("Connecting to Home Assistant for receive loop...")
                     if not await self._reconnect_home_assistant():
                         await asyncio.sleep(self.ha_retry_delay)
@@ -309,8 +304,9 @@ class Kodi2Home:
                         # Normal timeout, loop continues
                         continue
 
-            except websockets.exceptions.ConnectionClosedError as e:
+            except (AttributeError, websockets.exceptions.ConnectionClosedError) as e:
                 logging.warning(f"Home Assistant receive connection closed: {e}")
+                self.websocket = None  # Mark as disconnected
                 await asyncio.sleep(self.ha_retry_delay)
 
             except Exception as e:
@@ -383,11 +379,12 @@ class Kodi2Home:
             True if reconnection successful, False otherwise
         """
         # Close existing connection if any
-        if self.websocket and not self.websocket.closed:
+        if self.websocket is not None:
             try:
                 await self.websocket.close()
             except Exception:
                 pass
+            self.websocket = None
 
         # Try to reconnect
         while not self.shutdown_requested:
@@ -418,7 +415,7 @@ class Kodi2Home:
             logging.info(f"Discarding {remaining} queued button press(es) - shutdown in progress")
 
         # Close connections
-        if self.websocket and not self.websocket.closed:
+        if self.websocket is not None:
             try:
                 await self.websocket.close()
                 logging.info("Home Assistant connection closed")
